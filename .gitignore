@@ -1,0 +1,10 @@
+# Sensitive / local files — never commit these
+tg_api.txt
+*.session
+*.session-journal
+__pycache__/
+*.py[cod]
+
+# OS junk
+Thumbs.db
+.DS_Store
