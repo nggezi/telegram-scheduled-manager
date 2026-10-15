@@ -3,7 +3,8 @@
 一套交互式 Python 脚本，用来管理 Telegram 服务器端的定时消息：
 
 - **删**：查找并删除残留的“每天重复发送”定时消息；
-- **加**：为非 Premium 账号批量创建定时发送消息，模拟“每天重复”效果。
+- **加**：为非 Premium 账号批量创建定时发送消息，模拟“每天重复”效果；
+- **多账号**：可管理并切换多个 Telegram 账号（共享一份 api_id/api_hash）。
 
 ## 快速开始
 
@@ -11,18 +12,21 @@
 pip install -r requirements.txt
 
 # 首次运行会让你填一次 api_id / api_hash，存到 config/tg_api.txt
+# 然后选择/新建一个账号（每个账号单独登录）
 python main.py
 ```
 
-菜单：
+先选择账号，再进入菜单：
 
 ```
  [1] 添加：批量创建定时发送消息（模拟每天重复，无需 Premium）
  [2] 查看/删除：查找并删除计划队列里的定时消息
+ [3] 切换账号
+ [4] 账号管理（新增 / 删除）
  [0] 退出
 ```
 
-也可以直接进入某个功能：
+也可以直接进入某个功能（会先让你选账号）：
 
 ```bash
 python main.py add       # 只“加”
@@ -30,6 +34,15 @@ python main.py remove    # 只“删”
 ```
 
 Windows 用户可直接双击 `start.bat`。
+
+## 多账号
+
+- 所有账号**共享**一份 `api_id` / `api_hash`（放在 `config/tg_api.txt`）。
+- 每个账号有自己的会话文件：`config/sessions/<账号名>.session`。
+- 账号名可自定义（字母/数字/下划线/连字符，如 `main`、`work-1`），列表存在
+  `config/accounts.json`。
+- 启动时选账号；运行中可用菜单 `[3]` 切换、`[4]` 新增或删除账号。
+- 从旧版单账号升级时，原会话会**自动迁移**为账号 `default`。
 
 ## 目录结构
 
@@ -40,10 +53,13 @@ telegram-scheduled-manager/
 ├─ start.bat                  # Windows 双击启动
 ├─ config/
 │  ├─ config.example.txt     # 凭据模板（复制为 tg_api.txt 后填写）
-│  └─ tg_api.txt             # 你的凭据（自动生成，已被 git 忽略）
+│  ├─ tg_api.txt             # 共享凭据（自动生成，已被 git 忽略）
+│  ├─ accounts.json          # 账号名列表（已被 git 忽略）
+│  └─ sessions/              # 各账号会话文件（已被 git 忽略）
 ├─ src/
 │  └─ tg_sched/
 │     ├─ config.py           # 路径、常量、凭据读写
+│     ├─ accounts.py         # 多账号管理（列表/增删/选择/迁移）
 │     ├─ client.py           # 登录、对话列表、计划队列读写
 │     ├─ ui.py               # 聊天选择、输入校验、显示
 │     ├─ bulk.py             # 功能：加（批量排期）
@@ -51,7 +67,7 @@ telegram-scheduled-manager/
 └─ tests/                    # 离线单元测试（无需账号）
 ```
 
-凭据与会话文件都放在 `config/` 下，只需登录一次。
+凭据与会话文件都放在 `config/` 下，每个账号只需登录一次。
 
 ---
 
@@ -197,11 +213,13 @@ python main.py add        # 或运行 python main.py 后在菜单选 [1]
 
 ## 测试
 
-`build_schedule` 的时间计算（条数、间隔、全在未来、已过时刻顺延、HH:MM 保持）
-有不联网的单元测试：
+全部是不联网的离线单元测试（无需账号）：
 
 ```bash
-python tests/test_schedule.py
+python tests/test_schedule.py      # 排期时间计算
+python tests/test_interactions.py  # 输入校验与聊天选择
+python tests/test_bulk_run.py      # 假 client 端到端跑“加”
+python tests/test_accounts.py      # 多账号增删/选择/校验
 ```
 
 ## 免责声明

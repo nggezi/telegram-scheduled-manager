@@ -1,5 +1,7 @@
 # Sensitive / local files — never commit these
 config/tg_api.txt
+config/accounts.json
+config/sessions/
 config/*.session
 config/*.session-journal
 *.session

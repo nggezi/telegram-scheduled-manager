@@ -2,8 +2,9 @@
 """全局配置：路径、常量、本地时区、凭据读写。
 
 路径约定（基于项目根目录）：
-    <root>/config/tg_api.txt     凭据（api_id / api_hash），已被 .gitignore 忽略
-    <root>/config/tg_scheduled.session   会话文件，已被 .gitignore 忽略
+    <root>/config/tg_api.txt      共享凭据（api_id / api_hash），已被 .gitignore 忽略
+    <root>/config/accounts.json   账号名列表，见 accounts.py
+    <root>/config/sessions/*.session   各账号的会话文件，已被 .gitignore 忽略
 """
 
 import os

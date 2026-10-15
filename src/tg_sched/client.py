@@ -7,21 +7,24 @@ from telethon.tl.functions.messages import (
     DeleteScheduledMessagesRequest,
 )
 
-from .config import SESSION_FILE, load_or_ask_credentials
+from .config import load_or_ask_credentials
+from .accounts import session_path
 
 
-async def login(client):
+async def login(client, account_name=None):
     """连接并登录，打印账号信息。"""
-    print("\n正在连接 Telegram ...")
+    label = ("账号 '%s'：" % account_name) if account_name else ""
+    print("\n正在连接 Telegram ...%s" % (("（" + label.rstrip("：") + "）") if label else ""))
     await client.start()
     me = await client.get_me()
     if me is None:
         print("登录异常：无法获取账号信息，请重新运行并完成手机号登录。")
         raise RuntimeError("get_me() returned None")
-    print("登录成功：%s (@%s)  id=%s" % (
+    print("登录成功：%s (@%s)  id=%s%s" % (
         " ".join(filter(None, [me.first_name, me.last_name])),
         me.username or "无",
         me.id,
+        ("  [%s]" % account_name) if account_name else "",
     ))
     if getattr(me, "premium", False):
         print("提示：检测到本账号是 Premium —— 你其实可以直接用官方「重复定时」，无需本工具。")
@@ -49,7 +52,7 @@ async def delete_scheduled(client, peer, ids):
     await client(DeleteScheduledMessagesRequest(peer=peer, id=ids))
 
 
-def create_client():
-    """创建（未连接的）Telegram 客户端，凭据来自 config 或交互输入。"""
+def create_client(account_name):
+    """为指定账号创建（未连接的）客户端。凭据共享自 config/tg_api.txt。"""
     api_id, api_hash = load_or_ask_credentials()
-    return TelegramClient(SESSION_FILE, api_id, api_hash)
+    return TelegramClient(session_path(account_name), api_id, api_hash)

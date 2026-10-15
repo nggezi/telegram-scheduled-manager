@@ -30,17 +30,28 @@
 main.py                 入口（替代 tg_scheduled.py，支持 main.py add/remove）
 src/tg_sched/
   config.py             路径/常量/凭据读写/时区/REPEAT_LABELS
+  accounts.py           多账号管理（列表/增删/选择/迁移）
   client.py             登录、对话列表、计划队列读写
   ui.py                 聊天选择、输入校验、显示
   bulk.py               功能：加
   remover.py            功能：删
 config/
   config.example.txt    凭据模板
-  tg_api.txt            实际凭据（git 忽略）
+  tg_api.txt            共享凭据（git 忽略）
+  accounts.json         账号名列表（git 忽略）
+  sessions/             各账号会话（git 忽略）
 tests/                  离线单元测试
 requirements.txt
 start.bat               Windows 双击启动（CRLF 编码）
 ```
+
+### 3.1 多账号（本次）
+
+- 所有账号**共享**一份 api_id/api_hash（config/tg_api.txt）。
+- 每账号独立会话 config/sessions/<name>.session；账号名自定义。
+- 启动先选账号；菜单 [3] 切换账号、[4] 新增/删除账号。
+- **向后兼容**：旧单账号会话自动迁移为账号 `default`（已实测生效）。
+- 账号名白名单校验 `[A-Za-z0-9_-]{1,32}`，防路径穿越。
 
 ### 4. 修复的问题（自审）
 
@@ -60,8 +71,10 @@ start.bat               Windows 双击启动（CRLF 编码）
 ## 验证
 
 - `python -m py_compile`：全部源码 + 测试编译通过。
-- `python tests/test_schedule.py` / `test_interactions.py` / `test_bulk_run.py`：全 PASS。
-- `python main.py`：能读取 `config/tg_api.txt` 并进入登录流程（联网验证需真实账号）。
+- `python tests/test_schedule.py` / `test_interactions.py` / `test_bulk_run.py` /
+  `test_accounts.py`：全 PASS。
+- `python main.py`：能读取 `config/tg_api.txt`、自动迁移旧会话为 `default`、
+  进入账号选择界面（联网验证需真实账号）。
 - `start.bat`：CRLF 编码，双击可运行。
 
 > 未做真实联网排期验证，建议先给自己/Saved Messages 排 2~3 天试跑。
