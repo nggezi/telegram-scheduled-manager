@@ -25,6 +25,15 @@ import os
 import sys
 import asyncio
 import unicodedata
+from datetime import datetime, timezone
+
+# Windows 控制台默认可能是 GBK，打印 ✔/✘/⚠ 等字符会抛 UnicodeEncodeError 而崩溃。
+# 这里在导入阶段把标准输出/错误重配为 UTF-8（无法重配时静默跳过）。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 try:
     from telethon import TelegramClient
@@ -41,6 +50,9 @@ except ImportError:
 
 SESSION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tg_scheduled_fix")
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tg_api.txt")
+
+# 本地时区（供 bulk_schedule.py 复用）
+LOCAL_TZ = datetime.now().astimezone().tzinfo
 
 # 重复周期（秒）-> 人类可读
 REPEAT_LABELS = {
@@ -129,6 +141,10 @@ async def login(client):
     print("\n正在连接 Telegram ...")
     await client.start()
     me = await client.get_me()
+    if me is None:
+        # 极端情况下（会话失效等）get_me 可能返回 None
+        print("登录异常：无法获取账号信息，请重新运行并完成手机号登录。")
+        raise RuntimeError("get_me() returned None")
     print("登录成功：%s (@%s)  id=%s" % (
         " ".join(filter(None, [me.first_name, me.last_name])),
         me.username or "无",
@@ -144,15 +160,16 @@ async def list_dialogs(client):
     return dialogs
 
 
-def choose_chat(dialogs):
+def choose_chat(dialogs, hint=None):
     print("\n你的聊天列表：")
     print("-" * 64)
     for i, d in enumerate(dialogs):
         print("[%3d] %s" % (i, cjk_width_name(d.entity)))
     print("-" * 64)
-    print("提示：已注销账号通常显示为 [已注销]，名字可能是 'Deleted Account'。")
+    if hint:
+        print("提示：%s" % hint)
     while True:
-        raw = input("请输入要检查的聊天编号（可输入多个，用逗号分隔；直接回车取消）: ").strip()
+        raw = input("请输入要操作的聊天编号（可输入多个，用逗号分隔；直接回车取消）: ").strip()
         if raw == "":
             return []
         try:
@@ -182,23 +199,31 @@ def describe_scheduled(msg):
     print("    计划消息 ID : %s" % msg.id)
     print("    内容        : %r" % text_show)
     if msg.date:
-        print("    下次发送时间: %s (UTC)" % msg.date.strftime("%Y-%m-%d %H:%M:%S"))
+        # msg.date 一般是带时区的 UTC；若为 naive 则按 UTC 处理，最后统一转本地时区
+        dt = msg.date
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        local = dt.astimezone(LOCAL_TZ)
+        print("    下次发送时间: %s (本地时间)" % local.strftime("%Y-%m-%d %H:%M:%S"))
     if repeat:
-        print("    >>> 重复周期  : %s  <== 这就是每天重复的定时任务！"
-              % repeat_label(repeat))
+        days = repeat / 86400.0
+        if repeat == 86400:
+            extra = "  <== 这就是每天重复的定时任务！"
+        else:
+            extra = "  (重复型，约 %.2f 天一次)" % days
+        print("    >>> 重复周期  : %s%s" % (repeat_label(repeat), extra))
     else:
         print("    重复周期    : 无（一次性定时消息）")
 
 
-async def main():
-    api_id, api_hash = load_or_ask_credentials()
-
-    client = TelegramClient(SESSION_FILE, api_id, api_hash)
-    await login(client)
-
+async def run(client):
+    """【功能：删】查找并删除定时消息的主流程。client 已登录。"""
     while True:
         dialogs = await list_dialogs(client)
-        chosen = choose_chat(dialogs)
+        chosen = choose_chat(
+            dialogs,
+            hint="已注销账号通常显示为 [已注销]，名字可能是 'Deleted Account'。",
+        )
         if not chosen:
             print("已取消。")
             break
@@ -231,15 +256,15 @@ async def main():
                 if getattr(m, "schedule_repeat_period", None):
                     repeating.append(m)
 
-            if not repeating:
-                print("\n  该聊天没有“重复型”定时消息，只有一次性任务，未做任何删除。")
-                continue
-
-            # 只针对重复任务，默认只删除内容包含 /qd 的
-            targets = [m for m in repeating if m.message and "/qd" in m.message]
+            # 默认只删除内容包含 /qd 的消息（重复型或一次性都算），
+            # 若没有匹配项，再让用户手动输入要删除的计划消息 ID。
+            targets = [m for m in msgs if m.message and "/qd" in m.message]
             if not targets:
-                print("\n  有重复任务，但没有内容包含 '/qd' 的。")
-                ans = input("  是否要手动指定要删除的重复任务 ID（回车跳过）: ").strip()
+                if repeating:
+                    print("\n  有重复任务，但没有内容包含 '/qd' 的。")
+                else:
+                    print("\n  该聊天只有一次性定时消息，且没有内容包含 '/qd' 的。")
+                ans = input("  是否要手动指定要删除的计划消息 ID（回车跳过）: ").strip()
                 if not ans:
                     continue
                 try:
@@ -247,15 +272,16 @@ async def main():
                 except ValueError:
                     print("  输入无效，跳过。")
                     continue
-                targets = [m for m in repeating if m.id in ids]
+                targets = [m for m in msgs if m.id in ids]
                 if not targets:
                     print("  没有匹配到计划消息 ID，跳过。")
                     continue
 
-            print("\n  将要删除以下【重复定时消息】（从计划队列永久移除，之后不再重复）：")
+            print("\n  将要删除以下【计划消息】（从计划队列永久移除，之后不再发送）：")
             for m in targets:
-                print("    - ID=%s  周期=%s  内容=%r" % (
-                    m.id, repeat_label(m.schedule_repeat_period), m.message))
+                period = getattr(m, "schedule_repeat_period", None)
+                kind = repeat_label(period) if period else "一次性"
+                print("    - ID=%s  类型=%s  内容=%r" % (m.id, kind, m.message))
 
             confirm = input("\n  确认删除？输入 yes 执行，其它任意键取消: ").strip().lower()
             if confirm != "yes":
@@ -271,9 +297,19 @@ async def main():
 
         again = input("\n是否继续检查其它聊天？(y/N): ").strip().lower()
         if again != "y":
-            break
+            return
 
-    await client.disconnect()
+
+async def main():
+    api_id, api_hash = load_or_ask_credentials()
+
+    client = TelegramClient(SESSION_FILE, api_id, api_hash)
+    await login(client)
+
+    try:
+        await run(client)
+    finally:
+        await client.disconnect()
     print("\n完成。")
 
 
