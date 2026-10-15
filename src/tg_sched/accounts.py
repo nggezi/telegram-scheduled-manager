@@ -15,7 +15,7 @@ import sys
 import json
 import re
 
-from .config import CONFIG_DIR, SESSION_FILE as LEGACY_SESSION_FILE
+from .config import CONFIG_DIR, LEGACY_SESSION_FILE
 
 ACCOUNTS_FILE = os.path.join(CONFIG_DIR, "accounts.json")
 SESSIONS_DIR = os.path.join(CONFIG_DIR, "sessions")

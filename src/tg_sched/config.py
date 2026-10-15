@@ -23,7 +23,8 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 
 CONFIG_DIR = os.path.join(ROOT_DIR, "config")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "tg_api.txt")
-SESSION_FILE = os.path.join(CONFIG_DIR, "tg_scheduled")
+# 旧版单账号会话路径，仅用于向多账号自动迁移，见 accounts.py
+LEGACY_SESSION_FILE = os.path.join(CONFIG_DIR, "tg_scheduled")
 
 # 本地时区（供排期/显示复用）
 LOCAL_TZ = datetime.now().astimezone().tzinfo
