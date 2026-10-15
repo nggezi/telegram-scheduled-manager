@@ -8,18 +8,50 @@
 ## 快速开始
 
 ```bash
-pip install telethon
-python tg_scheduled.py        # 统一入口：[1] 添加 / [2] 查看删除
+pip install -r requirements.txt
+
+# 首次运行会让你填一次 api_id / api_hash，存到 config/tg_api.txt
+python main.py
 ```
 
-也可以只跑单个功能：
+菜单：
+
+```
+ [1] 添加：批量创建定时发送消息（模拟每天重复，无需 Premium）
+ [2] 查看/删除：查找并删除计划队列里的定时消息
+ [0] 退出
+```
+
+也可以直接进入某个功能：
 
 ```bash
-python bulk_schedule.py            # 只“加”
-python fix_telegram_scheduled.py   # 只“删”
+python main.py add       # 只“加”
+python main.py remove    # 只“删”
 ```
 
-三者共用同一目录下的 `tg_api.txt` 与 `tg_scheduled_fix.session`，只需登录一次。
+Windows 用户可直接双击 `start.bat`。
+
+## 目录结构
+
+```
+telegram-scheduled-manager/
+├─ main.py                    # 程序入口
+├─ requirements.txt
+├─ start.bat                  # Windows 双击启动
+├─ config/
+│  ├─ config.example.txt     # 凭据模板（复制为 tg_api.txt 后填写）
+│  └─ tg_api.txt             # 你的凭据（自动生成，已被 git 忽略）
+├─ src/
+│  └─ tg_sched/
+│     ├─ config.py           # 路径、常量、凭据读写
+│     ├─ client.py           # 登录、对话列表、计划队列读写
+│     ├─ ui.py               # 聊天选择、输入校验、显示
+│     ├─ bulk.py             # 功能：加（批量排期）
+│     └─ remover.py          # 功能：删
+└─ tests/                    # 离线单元测试（无需账号）
+```
+
+凭据与会话文件都放在 `config/` 下，只需登录一次。
 
 ---
 
@@ -79,12 +111,12 @@ pip install telethon
 ## 运行
 
 ```bash
-python fix_telegram_scheduled.py
+python main.py remove
 ```
 
 运行流程：
 
-1. 首次运行会让你输入 `api_id` 和 `api_hash`，保存到 `tg_api.txt`，下次自动读取。
+1. 首次运行会让你输入 `api_id` 和 `api_hash`，保存到 `config/tg_api.txt`，下次自动读取。
 2. 用手机号登录（验证码发到你的 Telegram App，不是短信）。
 3. 列出你的聊天，输入要检查的聊天编号（可多个，逗号分隔）。
 4. 脚本查询该聊天的计划队列，打印全部计划消息，并**高亮重复任务**。
@@ -106,7 +138,7 @@ python fix_telegram_scheduled.py
 
 ## 安全与隐私
 
-- `api_hash` 相当于密码，**不要外传**；`tg_api.txt` 与 `*.session` 已被 `.gitignore` 忽略，切勿提交或分享。
+- `api_hash` 相当于密码，**不要外传**；`config/tg_api.txt` 与 `*.session` 已被 `.gitignore` 忽略，切勿提交或分享。
 - 脚本只读写**你自己账号**的计划队列，不发消息、不加群、不批量操作。
 - 建议不要高频重复运行脚本。正常一次操作即可。
 - 登录后可在 Telegram App「设置 → 设备」里登出该 session。
@@ -138,16 +170,16 @@ python fix_telegram_scheduled.py
 ## 用法
 
 ```bash
-python bulk_schedule.py     # 或统一入口 python tg_scheduled.py 选 [1]
+python main.py add        # 或运行 python main.py 后在菜单选 [1]
 ```
 
 运行流程：
 
 1. 登录后列出你的聊天，输入目标聊天编号（可多个，逗号分隔），例如某个打卡 Bot 私聊。
 2. 输入每天发送时间（`HH:MM`，本地时区，例如 `23:10`）。
-3. 输入预排天数（例如 `30`）。
+3. 输入预排天数（例如 `30`，最多 365）。
 4. 输入要发送的内容（例如 `/qd`）。
-5. 脚本打印首条 / 末条时间与总条数，**要求输入 `yes` 确认**后才逐条排期。
+5. 脚本打印首条 / 末条时间、总条数，以及每个聊天“现有 N 条 + 本次 M 条”，**要求输入 `yes` 确认**后才逐条排期。
 6. 逐条显示成功 / 失败；结束后可继续为其它聊天排期。
 
 ## 时间规则
@@ -158,10 +190,10 @@ python bulk_schedule.py     # 或统一入口 python tg_scheduled.py 选 [1]
 
 ## 注意事项
 
-- 计划队列有数量上限，预排天数过多（脚本会在 >100 天时提醒）可能失败；失败行会单独报错，不影响其它条目。
+- 计划队列有数量上限，脚本会在“叠加后可能超过 100 条”时提醒；失败行会单独报错，不影响其它条目。
 - 非 Premium 号依然无法创建「一条永久重复」的任务；本方案是 N 天一次性排期，需定期补排。
-- Premium 号登录时脚本会提示：你其实可直接用官方「重复定时」，无需本脚本。
-- 删除这些排期：用统一入口选 `[2]` 或直接跑 `fix_telegram_scheduled.py`。
+- Premium 号登录时脚本会提示：你其实可直接用官方「重复定时」，无需本工具。
+- 删除这些排期：用 `python main.py remove`（或菜单选 `[2]`）。
 
 ## 测试
 

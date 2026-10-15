@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""用假 client 端到端跑 bulk_schedule.run，验证不崩溃、排期次数正确、格式化正确。
+"""用假 client 端到端跑 bulk.run，验证不崩溃、排期次数正确、格式化正确。
 
 不联网：假 client 的 send_message 只记录调用。
 运行： python tests/test_bulk_run.py
@@ -7,12 +7,11 @@
 import sys
 import os
 import asyncio
-from datetime import datetime
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
-import bulk_schedule as bs
-import fix_telegram_scheduled as fix
+from tg_sched import bulk
+from tg_sched.client import list_dialogs as real_list_dialogs
 
 
 class FakeInput:
@@ -31,7 +30,6 @@ def patch_input(answers):
         __builtins__["input"] = fake
     else:
         __builtins__.input = fake
-    return fake
 
 
 class FakeDialog:
@@ -52,52 +50,45 @@ class FakeClient:
         self.sent.append((peer, text, schedule))
 
     async def __call__(self, request):
-        # existing_scheduled -> GetScheduledHistoryRequest
         class R:
             messages = []
         return R()
 
 
-def test_bulk_run_end_to_end():
-    # 让 list_dialogs 返回固定两个聊天
-    orig_dialogs = fix.list_dialogs
-    orig_bs_dialogs = bs.list_dialogs
-
-    async def fake_list(client):
+def _fake_list(client):
+    async def _inner(c):
         return [FakeDialog("BotA"), FakeDialog("BotB")]
+    return _inner
 
-    fix.list_dialogs = fake_list
-    bs.list_dialogs = fake_list
 
-    # 输入序列：选择聊天 "0,1" -> 时间 23:10 -> 天数 3 -> 内容 /qd -> 确认 yes -> 不再继续
+def test_bulk_run_end_to_end():
+    orig = bulk.list_dialogs
+    bulk.list_dialogs = _fake_list(None)
     patch_input(["0,1", "23:10", "3", "/qd", "yes", "n"])
     client = FakeClient()
     try:
-        asyncio.run(bs.run(client))
+        asyncio.run(bulk.run(client))
     finally:
-        fix.list_dialogs = orig_dialogs
-        bs.list_dialogs = orig_bs_dialogs
+        bulk.list_dialogs = orig
 
-    # 2 个聊天 × 3 天 = 6 条
     assert len(client.sent) == 6, "应为 6 条，实际 %d" % len(client.sent)
     assert all(t == "/qd" for _, t, _ in client.sent)
-    # 每个聊天各 3 条，且时间递增
     peers = [p for p, _, _ in client.sent]
     assert peers.count("BotA") == 3 and peers.count("BotB") == 3
 
 
 def test_bulk_run_cancel():
-    async def fake_list(client):
+    async def fake_list(c):
         return [FakeDialog("BotA")]
 
-    orig = bs.list_dialogs
-    bs.list_dialogs = fake_list
-    patch_input(["0", "23:10", "2", "/qd", "no", ""])  # 输入 no 取消排期，再回车退出
+    orig = bulk.list_dialogs
+    bulk.list_dialogs = fake_list
+    patch_input(["0", "23:10", "2", "/qd", "no", ""])
     client = FakeClient()
     try:
-        asyncio.run(bs.run(client))
+        asyncio.run(bulk.run(client))
     finally:
-        bs.list_dialogs = orig
+        bulk.list_dialogs = orig
     assert len(client.sent) == 0, "取消后不应发送任何消息"
 
 
